@@ -43,8 +43,7 @@ else ifeq ($(uname_S),Darwin)
 else ifeq ($(findstring CYGWIN,$(uname_S)),CYGWIN)
   REAL_CFLAGS+=-Wno-char-subscripts -Wno-implicit-function-declaration
   CFLAGS?= -std=gnu99 -pedantic $(OPTIMIZATION) -Wall -W -D__USE_MINGW_ANSI_STDIO=1 -Wwrite-strings $(ARCH) $(PROF)
-  REAL_CFLAGS+= -mthreads
-  LIBS= -lws2_32 
+  LIBS= -lws2_32 -lpthread 
   DYLIBNAME=$(LIBNAME).dll
   #DYLIB_MAKE_CMD=$(CC) -shared -Wl,-soname,${DYLIBNAME} -o ${DYLIBNAME} ${OBJ} ${LIBS}
   #DYLIB_MAKE_CMD=$(CC) -shared -Wl,-soname,${DYLIBNAME} -o ${DYLIBNAME} ${LIBS}
