@@ -15,7 +15,7 @@ CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 OPTIMIZATION?=-O3
 WARNINGS=-Wall -W -Wstrict-prototypes -Wwrite-strings
 DEBUG?= -g -ggdb
-REAL_CFLAGS=$(OPTIMIZATION) -fPIC $(CFLAGS) $(WARNINGS) $(DEBUG) $(ARCH)
+REAL_CFLAGS=$(OPTIMIZATION) $(CFLAGS) $(WARNINGS) $(DEBUG) $(ARCH)
 REAL_LDFLAGS=$(LDFLAGS) $(ARCH)
 
 DYLIBSUFFIX=so
@@ -30,18 +30,30 @@ STLIB_MAKE_CMD=ar rcs $(STLIBNAME)
 # Platform-specific overrides
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 ifeq ($(uname_S),SunOS)
+  REAL_CFLAGS+= -fPIC
   REAL_LDFLAGS+= -ldl -lnsl -lsocket
   DYLIB_MAKE_CMD=$(CC) -G -o $(DYLIBNAME) -h $(DYLIB_MINOR_NAME) $(LDFLAGS)
   INSTALL= cp -r
-endif
-ifeq ($(uname_S),Darwin)
+else ifeq ($(uname_S),Darwin)
+  REAL_CFLAGS+= -fPIC
   DYLIBSUFFIX=dylib
   DYLIB_MINOR_NAME=$(LIBNAME).$(HIREDIS_MAJOR).$(HIREDIS_MINOR).$(DYLIBSUFFIX)
   DYLIB_MAJOR_NAME=$(LIBNAME).$(HIREDIS_MAJOR).$(DYLIBSUFFIX)
   DYLIB_MAKE_CMD=$(CC) -shared -Wl,-install_name,$(DYLIB_MINOR_NAME) -o $(DYLIBNAME) $(LDFLAGS)
-endif
-ifeq ($(findstring CYGWIN,$(uname_S)),CYGWIN)
+else ifeq ($(findstring CYGWIN,$(uname_S)),CYGWIN)
   REAL_CFLAGS+=-Wno-char-subscripts -Wno-implicit-function-declaration
+  CFLAGS?= -std=gnu99 -pedantic $(OPTIMIZATION) -Wall -W -D__USE_MINGW_ANSI_STDIO=1 -Wwrite-strings $(ARCH) $(PROF)
+  REAL_CFLAGS+= -mthreads
+  LIBS= -lws2_32 
+  DYLIBNAME=$(LIBNAME).dll
+  #DYLIB_MAKE_CMD=$(CC) -shared -Wl,-soname,${DYLIBNAME} -o ${DYLIBNAME} ${OBJ} ${LIBS}
+  #DYLIB_MAKE_CMD=$(CC) -shared -Wl,-soname,${DYLIBNAME} -o ${DYLIBNAME} ${LIBS}
+  #gcc -shared -o libX.dll -Wl,--out-implib=libX.a fails
+  DYLIB_MAKE_CMD=$(CC) -shared -Wl,--out-implib=$(LIBNAME).a -o ${LIBNAME}.dll ${LIBS}
+  STLIBNAME=$(LIBNAME)_static.a  
+  STLIB_MAKE_CMD?=ar rcs ${STLIBNAME} ${OBJ}
+else
+  REAL_CFLAGS+= -fPIC
 endif
 
 all: $(DYLIBNAME) $(BINS)
@@ -122,9 +134,15 @@ INSTALL?= cp -a
 install: $(DYLIBNAME) $(STLIBNAME)
 	mkdir -p $(INSTALL_INCLUDE_PATH) $(INSTALL_LIBRARY_PATH)
 	$(INSTALL) hiredis.h async.h adapters $(INSTALL_INCLUDE_PATH)
+ifeq ($(findstring CYGWIN,$(uname_S)),CYGWIN)
+	$(INSTALL) $(LIBNAME).a $(INSTALL_LIBRARY_PATH)
+	$(INSTALL) $(LIBNAME).dll $(INSTALL_LIBRARY_PATH)/hiredis.dll
+	$(INSTALL) $(LIBNAME).dll $(INSTALL_LIBRARY_PATH)
+else
 	$(INSTALL) $(DYLIBNAME) $(INSTALL_LIBRARY_PATH)/$(DYLIB_MINOR_NAME)
 	cd $(INSTALL_LIBRARY_PATH) && ln -sf $(DYLIB_MINOR_NAME) $(DYLIB_MAJOR_NAME)
 	cd $(INSTALL_LIBRARY_PATH) && ln -sf $(DYLIB_MAJOR_NAME) $(DYLIBNAME)
+endif
 	$(INSTALL) $(STLIBNAME) $(INSTALL_LIBRARY_PATH)
 
 32bit:
