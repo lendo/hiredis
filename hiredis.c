@@ -37,6 +37,14 @@
 #include <errno.h>
 #include <ctype.h>
 
+#ifdef _WIN32
+  #ifndef FD_SETSIZE
+    #define FD_SETSIZE 16000
+  #endif
+  #include <winsock2.h>
+  #include <windows.h>
+#endif
+
 #include "hiredis.h"
 #include "net.h"
 #include "sds.h"
@@ -880,7 +888,11 @@ int redisvFormatCommand(char **target, const char *format, va_list ap) {
 
     pos = sprintf(cmd,"*%d\r\n",argc);
     for (j = 0; j < argc; j++) {
+#ifdef _WIN32
+        pos += sprintf(cmd+pos,"$%llu\r\n",(unsigned long long)sdslen(curargv[j]));
+#else
         pos += sprintf(cmd+pos,"$%zu\r\n",sdslen(curargv[j]));
+#endif
         memcpy(cmd+pos,curargv[j],sdslen(curargv[j]));
         pos += sdslen(curargv[j]);
         sdsfree(curargv[j]);
@@ -957,7 +969,11 @@ int redisFormatCommandArgv(char **target, int argc, const char **argv, const siz
     pos = sprintf(cmd,"*%d\r\n",argc);
     for (j = 0; j < argc; j++) {
         len = argvlen ? argvlen[j] : strlen(argv[j]);
+#ifdef _WIN32
+        pos += sprintf(cmd+pos,"$%llu\r\n",(unsigned long long)len);
+#else
         pos += sprintf(cmd+pos,"$%zu\r\n",len);
+#endif
         memcpy(cmd+pos,argv[j],len);
         pos += len;
         cmd[pos++] = '\r';
@@ -982,7 +998,11 @@ void __redisSetError(redisContext *c, int type, const char *str) {
     } else {
         /* Only REDIS_ERR_IO may lack a description! */
         assert(type == REDIS_ERR_IO);
+#ifdef _WIN32
+        //c->errstr = sdsnew(strerror(errno));
+#else
         strerror_r(errno,c->errstr,sizeof(c->errstr));
+#endif
     }
 }
 
@@ -1002,7 +1022,11 @@ static redisContext *redisContextInit(void) {
 
 void redisFree(redisContext *c) {
     if (c->fd > 0)
+#ifdef _WIN32
+        closesocket(c->fd);
+#else
         close(c->fd);
+#endif
     if (c->obuf != NULL)
         sdsfree(c->obuf);
     if (c->reader != NULL)
@@ -1074,8 +1098,16 @@ int redisBufferRead(redisContext *c) {
     /* Return early when the context has seen an error. */
     if (c->err)
         return REDIS_ERR;
-
+#ifdef _WIN32
+    nread = recv((SOCKET)c->fd,buf,sizeof(buf),0);
+    if (nread == -1) {
+        errno = WSAGetLastError();
+        if ((errno == ENOENT) || (errno == WSAEWOULDBLOCK))
+            errno = EAGAIN;
+    }
+#else
     nread = read(c->fd,buf,sizeof(buf));
+#endif
     if (nread == -1) {
         if (errno == EAGAIN && !(c->flags & REDIS_BLOCK)) {
             /* Try again later */
@@ -1112,7 +1144,16 @@ int redisBufferWrite(redisContext *c, int *done) {
         return REDIS_ERR;
 
     if (sdslen(c->obuf) > 0) {
+#ifdef _WIN32
+        nwritten = send((SOCKET)c->fd,c->obuf,sdslen(c->obuf),0);
+        if (nwritten == -1) {
+            errno = WSAGetLastError();
+            if ((errno == ENOENT) || (errno == WSAEWOULDBLOCK))
+                errno = EAGAIN;
+        }
+#else
         nwritten = write(c->fd,c->obuf,sdslen(c->obuf));
+#endif
         if (nwritten == -1) {
             if (errno == EAGAIN && !(c->flags & REDIS_BLOCK)) {
                 /* Try again later */

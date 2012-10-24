@@ -40,6 +40,11 @@
 #include "net.h"
 #include "dict.c"
 #include "sds.h"
+#ifdef _WIN32
+  #ifndef EINPROGRESS
+    #define EINPROGRESS WSAEWOULDBLOCK
+  #endif
+#endif
 
 #define _EL_ADD_READ(ctx) do { \
         if ((ctx)->ev.addRead) (ctx)->ev.addRead((ctx)->ev.data); \
