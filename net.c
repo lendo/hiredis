@@ -134,27 +134,7 @@ static int redisCreateSocket(redisContext *c, int type) {
 }
 #endif
 
-#ifdef _WIN32
-static int redisSetBlocking(redisContext *c, int fd, int blocking) {
-    // If iMode = 0, blocking is enabled;
-    // If iMode != 0, non-blocking mode is enabled.
-    u_long flags;
-
-    if (blocking)
-        flags = (u_long)0;
-    else
-        flags = (u_long)1;
-
-    if (ioctlsocket((SOCKET)fd, FIONBIO, &flags) == SOCKET_ERROR) {
-        errno = WSAGetLastError();
-        __redisSetError(c,REDIS_ERR_IO,
-            sdscatprintf(sdsempty(), "ioctlsocket(FIONBIO): %d\n", errno));
-        closesocket(fd);
-        return REDIS_ERR;
-    };
-    return REDIS_OK;
-}
-#else
+#ifndef _WIN32
 static int redisSetBlocking(redisContext *c, int fd, int blocking) {
     int flags;
 
