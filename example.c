@@ -15,21 +15,6 @@ int main(void) {
     redisContext *c;
     redisReply *reply;
 
-#ifdef _WIN32
-	/* This is needed, because otherwise all of socket calls will fail under
-       Windows, as the WSA subsystem wasn't initialized for our process. */
-    WSADATA t_wsa;
-    WORD wVers = MAKEWORD(2, 2); // Set the version number to 2.2
-    int iError = WSAStartup(wVers, &t_wsa);
-
-    if(iError != NO_ERROR || LOBYTE(t_wsa.wVersion) != 2 || HIBYTE(t_wsa.wVersion) != 2 ) {
-       printf("Winsock2 init error: %d\n", iError);
-       exit(1);
-    }
-
-    atexit((void(*)(void)) WSACleanup);
-#endif
-
     struct timeval timeout = { 1, 500000 }; // 1.5 seconds
     c = redisConnectWithTimeout((char*)"127.0.0.1", 6379, timeout);
     if (c->err) {

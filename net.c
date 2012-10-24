@@ -60,6 +60,7 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <limits.h>
 
 #include "net.h"
@@ -82,6 +83,35 @@ static void __redisSetErrorFromErrno(redisContext *c, int type, const char *pref
     __redisSetError(c,type,buf);
 }
 
+#ifdef _WIN32
+void startWinsock__(void) {
+	/* This is needed, because otherwise all of socket calls will fail under
+     * Windows, as the WSA subsystem wasn't initialized for our process. */
+    WSADATA t_wsa;
+    WORD wVers = MAKEWORD(2, 2); // Set the version number to 2.2
+    int iError = WSAStartup(wVers, &t_wsa);
+
+    if(iError != NO_ERROR || LOBYTE(t_wsa.wVersion) != 2 || HIBYTE(t_wsa.wVersion) != 2 ) {
+       printf("Winsock2 init error: %d\n", iError);
+       exit(1);
+    }
+
+    atexit((void(*)(void)) WSACleanup);
+}
+
+void startWinsock(void)
+{
+    static bool done = false;
+
+    if (done) {
+        return;
+    }
+
+    startWinsock__();
+    done = true;
+}
+#endif
+
 #ifndef _WIN32
 static int redisSetReuseAddr(redisContext *c, int fd) {
     int on = 1;
@@ -98,6 +128,8 @@ static int redisSetReuseAddr(redisContext *c, int fd) {
 static int redisCreateSocket(redisContext *c, int type) {
     SOCKET s;
     int on=1;
+
+    startWinsock();
 
     s = socket(type, SOCK_STREAM, IPPROTO_TCP);
     if (s == INVALID_SOCKET) {
