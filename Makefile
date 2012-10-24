@@ -42,15 +42,16 @@ else ifeq ($(uname_S),Darwin)
   DYLIB_MAKE_CMD=$(CC) -shared -Wl,-install_name,$(DYLIB_MINOR_NAME) -o $(DYLIBNAME) $(LDFLAGS)
 else ifeq ($(findstring CYGWIN,$(uname_S)),CYGWIN)
   REAL_CFLAGS+=-Wno-char-subscripts -Wno-implicit-function-declaration
-  CFLAGS?= -std=gnu99 -pedantic $(OPTIMIZATION) -Wall -W -D__USE_MINGW_ANSI_STDIO=1 -Wwrite-strings $(ARCH) $(PROF)
-  LIBS= -lws2_32 -lpthread 
+  CFLAGS?= -std=gnu99 -pedantic $(OPTIMIZATION) -Wall -W -D_ISOC99_SOURCE -D__USE_MINGW_ANSI_STDIO=1 -Wwrite-strings $(ARCH) $(PROF)
+  #REAL_LIBS= -lws2_32 -lwsock32
+  REAL_LDFLAGS= -lws2_32 -lwsock32
   DYLIBNAME=$(LIBNAME).dll
   #DYLIB_MAKE_CMD=$(CC) -shared -Wl,-soname,${DYLIBNAME} -o ${DYLIBNAME} ${OBJ} ${LIBS}
   #DYLIB_MAKE_CMD=$(CC) -shared -Wl,-soname,${DYLIBNAME} -o ${DYLIBNAME} ${LIBS}
   #gcc -shared -o libX.dll -Wl,--out-implib=libX.a fails
-  DYLIB_MAKE_CMD=$(CC) -shared -Wl,--out-implib=$(LIBNAME).a -o ${LIBNAME}.dll ${LIBS}
+  DYLIB_MAKE_CMD=$(CC) -shared -Wl,--out-implib=$(LIBNAME).a -o ${LIBNAME}.dll
   STLIBNAME=$(LIBNAME)_static.a  
-  STLIB_MAKE_CMD?=ar rcs ${STLIBNAME} ${OBJ}
+  STLIB_MAKE_CMD=ar rcs ${STLIBNAME} #${OBJ}
 else
   REAL_CFLAGS+= -fPIC
 endif
@@ -66,7 +67,7 @@ sds.o: sds.c sds.h
 test.o: test.c hiredis.h
 
 $(DYLIBNAME): $(OBJ)
-	$(DYLIB_MAKE_CMD) $(OBJ)
+	$(DYLIB_MAKE_CMD) $(OBJ) $(REAL_LDFLAGS)
 
 $(STLIBNAME): $(OBJ)
 	$(STLIB_MAKE_CMD) $(OBJ)
@@ -91,7 +92,8 @@ hiredis-example-ae: example-ae.c adapters/ae.h $(STLIBNAME)
 endif
 
 hiredis-%: %.o $(STLIBNAME)
-	$(CC) -o $@ $(REAL_LDFLAGS) $< $(STLIBNAME)
+	#$(CC) -o $@ $(REAL_LDFLAGS) $< $(STLIBNAME)
+	$(CC) -o $@ $< $(STLIBNAME) $(REAL_LDFLAGS)
 
 test: hiredis-test
 	./hiredis-test
