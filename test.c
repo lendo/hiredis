@@ -9,6 +9,11 @@
 #include <signal.h>
 #include <errno.h>
 
+#ifdef _WIN32
+  #include <winsock2.h>
+  #include <windows.h>
+#endif
+
 #include "hiredis.h"
 
 enum connection_type {
@@ -606,8 +611,23 @@ int main(int argc, char **argv) {
     };
     int throughput = 1;
 
+#ifdef _WIN32
+    WSADATA t_wsa;
+    WORD wVers;
+    int iError;
+
+    wVers = MAKEWORD(2, 2); // Set the version number to 2.2
+    iError = WSAStartup(wVers, &t_wsa);
+    if(iError != NO_ERROR || LOBYTE(t_wsa.wVersion) != 2 || HIBYTE(t_wsa.wVersion) != 2 ) {
+       printf("Winsock2 init error: %d\n", iError);
+       exit(1);
+    }
+
+    atexit((void(*)(void)) WSACleanup);
+#else
     /* Ignore broken pipe signal (for I/O error tests). */
     signal(SIGPIPE, SIG_IGN);
+#endif
 
     /* Parse command line options. */
     argv++; argc--;
