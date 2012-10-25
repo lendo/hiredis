@@ -32,12 +32,14 @@
 
 #include "fmacros.h"
 #include <sys/types.h>
+#include <stdlib.h>
 
 #ifdef _WIN32
   #ifndef FD_SETSIZE
     #define FD_SETSIZE 16000
   #endif
-  #include <winsock2.h>
+//  #include <winsock2.h>
+  #define WIN32_LEAN_AND_MEAN
   #include <windows.h>
   #define socklen_t int
   #ifndef EINPROGRESS
@@ -193,28 +195,19 @@ static int redisSetBlocking(redisContext *c, int fd, int blocking) {
 }
 #endif
 
+static int redisSetTcpNoDelay(redisContext *c, int fd) {
+    int yes = 1;
 #ifdef _WIN32
-static int redisSetTcpNoDelay(redisContext *c, int fd) {
-    int yes = 1;
     if (setsockopt((SOCKET)fd, IPPROTO_TCP, TCP_NODELAY, (const char *)&yes, sizeof(yes)) == -1) {
-        __redisSetError(c,REDIS_ERR_IO,
-            sdscatprintf(sdsempty(), "setsockopt(TCP_NODELAY): %d", (int)GetLastError()));
-        closesocket(fd);
-        return REDIS_ERR;
-    }
-    return REDIS_OK;
-}
 #else
-static int redisSetTcpNoDelay(redisContext *c, int fd) {
-    int yes = 1;
     if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes)) == -1) {
+#endif
         __redisSetErrorFromErrno(c,REDIS_ERR_IO,"setsockopt(TCP_NODELAY)");
         close(fd);
         return REDIS_ERR;
     }
     return REDIS_OK;
 }
-#endif
 
 #define __MAX_MSEC (((LONG_MAX) - 999) / 1000)
 
@@ -321,6 +314,28 @@ static int redisContextWaitReady(redisContext *c, int fd, const struct timeval *
 }
 #endif
 
+#ifdef _WIN32
+int redisCheckSocketError(redisContext *c, int fd) {
+    int err = 0;
+    socklen_t errlen = sizeof(err);
+
+    if (getsockopt(fd, SOL_SOCKET, SO_ERROR, (char *)&err, &errlen) == SOCKET_ERROR) {
+        __redisSetError(c,REDIS_ERR_IO,
+            sdscatprintf(sdsempty(), "getsockopt(SO_ERROR): %d", WSAGetLastError()));
+        closesocket(fd);
+        return REDIS_ERR;
+    }
+
+    if (err) {
+        errno = err;
+        __redisSetError(c,REDIS_ERR_IO,NULL);
+        closesocket(fd);
+        return REDIS_ERR;
+    }
+
+    return REDIS_OK;
+}
+#else
 int redisCheckSocketError(redisContext *c, int fd) {
     int err = 0;
     socklen_t errlen = sizeof(err);
@@ -340,6 +355,7 @@ int redisCheckSocketError(redisContext *c, int fd) {
 
     return REDIS_OK;
 }
+#endif
 
 int redisContextSetTimeout(redisContext *c, struct timeval tv) {
 #ifdef _WIN32
